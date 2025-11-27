@@ -226,3 +226,137 @@ def find_random_cell_of_type(grid, allowed_types=[0]):
 
     # Si no se encuentra ninguna, se retorna un fallback (0,0)
     return 0,0
+
+
+# ----------------------------
+# Pathfinding: BFS en terreno permitido
+# ----------------------------
+def bfs_shortest_path(grid, start, goal, for_enemy=True):
+    # Se crea una cola doble (deque) para implementar BFS
+    q = collections.deque()
+    # Se inicializa la cola con la posición inicial
+    q.append(start)
+
+    # Diccionario que almacena de dónde venimos para reconstruir el camino
+    prev = {start: None}
+
+    # Mientras haya nodos por explorar
+    while q:
+        cur = q.popleft()   # Se obtiene la posición actual desde el frente de la cola
+        # Si ya alcanzamos la meta, debemos reconstruir el camino
+        if cur == goal:
+            path = []   # Lista para guardar el camino
+            # Comenzamos desde la meta y seguimos los padres hacia atrás
+            node = cur
+            while node:
+                path.append(node)
+                node = prev[node]
+            path.reverse()  # Como se reconstruye al revés, se invierte
+            return path
+
+        # Extraemos fila y columna actual
+        r,c = cur
+
+        # Recorremos vecinos válidos 
+        for nr,nc in neighbors(r,c):
+            # Solo procesamos vecinos no visitados previamente
+            if (nr,nc) not in prev:
+                # Obtenemos el tipo de terreno numérico
+                t = grid[nr][nc]
+                # Obtenemos la clase de terreno asociada
+                cls = TERRAINS.get(t, Camino)
+
+                # Según si el BFS es para enemigo o para jugador, revisamos si ese terreno es transitable
+                if for_enemy:
+                    # Caminable por enemigo
+                    if cls.walkable_for_enemy:
+                        prev[(nr,nc)] = cur
+                        q.append((nr,nc))
+                else:
+                    # Caminable por jugador
+                    if cls.walkable_for_player:
+                        prev[(nr,nc)] = cur
+                        q.append((nr,nc))
+    # Si se agotó BFS (Busaqueda por amplitud) sin encontrar ruta, no hay camino posible
+    return None
+
+class Player:
+    def __init__(self, r, c, name="Player"):
+        # Posición de la celda del jugador
+        self.r = r
+        self.c = c
+        # Nombre del jugador
+        self.name = name
+
+        # Energía actual y máxima del jugador
+        self.energy = 100.0
+        self.max_energy = 100.0
+
+        # Coste por segundo de usar sprint
+        self.sprint_cost = 25.0
+        # Velocidad al hacer sprint (tiles por tick)
+        self.sprint_speed = 2
+        # Velocidad normal del jugador
+        self.base_speed = 1
+
+        # Bandera que indica si el jugador está esprintando
+        self.sprinting = False
+
+        # Número de trampas que puede colocar
+        self.traps_available = 3
+        # Tiempo mínimo entre colocaciones
+        self.trap_cooldown = 5.0
+        # Última vez en que colocó una trampa
+        self.last_trap_time = -999.0
+
+        # Puntuación acumulada
+        self.score = 0
+
+        # Estado de vida (para terminar juego)
+        self.alive = True
+
+    # Determina si el jugador puede o no colocar una trampa
+    def can_place_trap(self, now, active_traps_count):
+        # Limitación: máximo 3 trampas activas simultáneamente
+        if active_traps_count >= 3:
+            return False
+        # Limitación de cooldown entre uso
+        if now - self.last_trap_time < self.trap_cooldown:
+            return False
+        # Si pasó el cooldown y no hay exceso de trampas, puede colocar
+        return True
+
+class Enemy:
+    def __init__(self, r, c, id_=0):
+        # Posición del enemigo
+        self.r = r
+        self.c = c
+        # ID para distinguir enemigos
+        self.id = id_
+
+        # Si está vivo (puede morir por trampas)
+        self.alive = True
+
+        # Cuando muere se programa un respawn (segundos en el futuro)
+        self.respawn_time = None
+
+        # Velocidad del enemigo en tiles por tick
+        self.speed = 1
+
+        # Enemigos se mueven cada cierto tiempo (cooldown en segundos)
+        self.move_cooldown = 1.0
+
+        # Última vez que se movió
+        self.last_move = 0.0
+
+    # Retorna la posición como tupla (r,c)
+    def as_tuple(self):
+        return (self.r, self.c)
+
+class Trap:
+    def __init__(self, r,c, placed_time):
+        # Trampa colocada en una celda específica
+        self.r = r
+        self.c = c
+        # Momento exacto en que fue puesta (para expiración)
+        self.placed_time = placed_time
